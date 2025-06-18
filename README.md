@@ -9,7 +9,7 @@ Detects spoof devices like screens in images
 1. Open your project in Xcode.
 2. Select your project in the Project Navigator.
 3. Click on the Package Dependencies tab.
-4. Click the + icon and enter `https://github.com/AppliedRecognition/Spoof-Device-Detection-Apple.git` in the search box labelled "Search or Enter Package URL".
+4. Click the + icon and enter `https://github.com/AppliedRecognition/Spoof-Device-Detection-Ver-ID-3-Apple.git` in the search box labelled "Search or Enter Package URL".
 5. In the Dependency Rule drop-down select Up to Next Major Version and enter 1.0.0 in the adjacent text box.
 6. Press the "Add Package" button.
 
