@@ -3,6 +3,7 @@ import OHHTTPStubs
 import OHHTTPStubsSwift
 import VerIDCommonTypes
 import SpoofDeviceDetectionCore
+import UniformTypeIdentifiers
 @testable import SpoofDeviceDetection
 
 final class SpoofDeviceDetectionTests: XCTestCase {
@@ -104,6 +105,7 @@ final class SpoofDeviceDetectionTests: XCTestCase {
         XCTAssertTrue(isSpoof)
     }
     
+    @available(iOS 14, *)
     func testResizeImage() throws {
         guard let image = self.testImage else {
             XCTFail()
@@ -112,6 +114,22 @@ final class SpoofDeviceDetectionTests: XCTestCase {
         let resizedImage = try self.spoofDetector.resizeImage(image)
         XCTAssertEqual(resizedImage.size.width, self.spoofDetector.imageLongerSideLength)
         XCTAssertEqual(resizedImage.size.height, self.spoofDetector.imageLongerSideLength)
+//        guard let png = resizedImage.pngData() else {
+//            XCTFail()
+//            return
+//        }
+//        let transform = self.spoofDetector.createImageTransformForImageSize(image.size)
+//        let roi = self.testImageFaceRect.applying(transform)
+//        let body = FusionBody(image: png, roi: roi)
+//        let json = try JSONEncoder().encode(body)
+//        let attachment = XCTAttachment(data: json, uniformTypeIdentifier: UTType.json.identifier)
+//        attachment.lifetime = .keepAlways
+//        self.add(attachment)
+//        let pngAttachment = XCTAttachment(data: png, uniformTypeIdentifier: UTType.png.identifier)
+//        pngAttachment.lifetime = .keepAlways
+//        pngAttachment.name = "image1.png"
+//        self.add(pngAttachment)
+        
     }
     
     private func createSpoofDeviceDetection() throws -> SpoofDeviceDetection {
@@ -136,4 +154,18 @@ fileprivate struct Config: Decodable {
     let apiKey: String
     let url: String
     
+}
+
+fileprivate struct FusionBody: Encodable {
+    let image: String
+    let roi: [String: Float]
+    init(image: Data, roi: CGRect) {
+        self.image = image.base64EncodedString()
+        self.roi = [
+            "x": Float(roi.minX),
+            "y": Float(roi.minY),
+            "width": Float(roi.width),
+            "height": Float(roi.height)
+        ]
+    }
 }
