@@ -18,7 +18,7 @@ let package = Package(
             targets: ["SpoofDeviceDetectionCore"])
     ],
     dependencies: [
-        .package(url: "https://github.com/AppliedRecognition/Ver-ID-Common-Types-Apple.git", .upToNextMajor(from: "2.0.0")),
+        .package(url: "https://github.com/AppliedRecognition/Ver-ID-Common-Types-Apple.git", "2.0.0"..<"4.0.0"),
         .package(url: "https://github.com/AliSoftware/OHHTTPStubs.git", .upToNextMajor(from: "9.1.0"))
     ],
     targets: [
