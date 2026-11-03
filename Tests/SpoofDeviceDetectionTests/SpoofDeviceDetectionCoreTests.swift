@@ -36,11 +36,21 @@ private final class StubPolicyDeviceDetection: SpoofDeviceDetectionCore {
 
 /// Stage 2 stub that records whether it was consulted.
 private final class StubLivenessClassifier: FaceLivenessClassifier {
-    var probability: Float = 0.5
+    /// What the classifier returns. `nil` means inconclusive, which is how a
+    /// degenerate crop is reported.
+    var probability: Float? = 0.5
     var callCount = 0
-    func spoofProbabilityInImage(_ image: Image, regionOfInterest: CGRect) async throws -> Float {
+    func spoofProbabilityInImage(_ image: Image, regionOfInterest: CGRect) async throws -> Float? {
         self.callCount += 1
         return self.probability
+    }
+}
+
+/// Stage 2 stub that fails outright, to separate an error from an inconclusive result.
+private final class ThrowingLivenessClassifier: FaceLivenessClassifier {
+    struct Failure: Error {}
+    func spoofProbabilityInImage(_ image: Image, regionOfInterest: CGRect) async throws -> Float? {
+        throw Failure()
     }
 }
 
@@ -142,7 +152,7 @@ final class SpoofDeviceDetectionCoreTests: XCTestCase {
         classifier.probability = 0.99
         detector.faceLivenessClassifier = classifier
         let score = try await detector.detectSpoofInImage(try self.makeImage(), regionOfInterest: nil)
-        XCTAssertEqual(score, 0.0)
+        XCTAssertEqual(score, StubPolicyDeviceDetection.inconclusiveScore)
         XCTAssertEqual(classifier.callCount, 0)
     }
 
@@ -150,23 +160,78 @@ final class SpoofDeviceDetectionCoreTests: XCTestCase {
         let detector = try StubPolicyDeviceDetection()
         detector.deviceScore = nil
         let score = try await detector.detectSpoofInImage(try self.makeImage(), regionOfInterest: self.faceRegion)
-        XCTAssertEqual(score, 0.0)
+        XCTAssertEqual(score, StubPolicyDeviceDetection.inconclusiveScore)
+    }
+
+    // MARK: - An inconclusive Stage 2 resolves to live
+
+    /// The contract that a degenerate crop is inconclusive rather than an error
+    /// or a confident result, and that inconclusive resolves to **live**.
+    ///
+    /// The pipeline's only other exit is the stage 1 device check, which has
+    /// already declined by the time Stage 2 runs, so an unscorable crop is no
+    /// evidence of a spoof. Pinned here so the resolution cannot be changed to a
+    /// rejection, or to a throw, without a test failing.
+    func testInconclusiveStageTwoResolvesToLive() async throws {
+        let detector = try StubPolicyDeviceDetection()
+        detector.deviceScore = nil
+        detector.confidenceThreshold = 0.95
+        let classifier = StubLivenessClassifier()
+        classifier.probability = nil
+        detector.faceLivenessClassifier = classifier
+        let image = try self.makeImage()
+
+        let score = try await detector.detectSpoofInImage(image, regionOfInterest: self.faceRegion)
+        XCTAssertEqual(score, StubPolicyDeviceDetection.inconclusiveScore)
+        XCTAssertEqual(classifier.callCount, 1)
+
+        // The resolution that matters: the pipeline reports live.
+        let isSpoof = try await detector.isSpoofInImage(image, regionOfInterest: self.faceRegion)
+        XCTAssertFalse(isSpoof)
+    }
+
+    /// A classifier that throws is still an error. Only `nil` is inconclusive.
+    func testThrowingStageTwoStillPropagates() async throws {
+        let detector = try StubPolicyDeviceDetection()
+        detector.deviceScore = nil
+        detector.faceLivenessClassifier = ThrowingLivenessClassifier()
+        do {
+            _ = try await detector.detectSpoofInImage(try self.makeImage(), regionOfInterest: self.faceRegion)
+            XCTFail("Expected the classifier's error to propagate")
+        } catch {
+            // Expected
+        }
     }
 
     // MARK: - Threshold comparison
 
-    /// `SpoofDetection.isSpoofInImage` uses `>` rather than `>=`, so a score
-    /// exactly at the threshold is not a spoof.
-    func testThresholdComparisonIsExclusive() async throws {
+    /// `SpoofDetection.isSpoofInImage` uses `>=`, so a score exactly at the
+    /// threshold is a spoof. Apple's shipped comparison was exclusive, which
+    /// disagreed with Android and the cloud at exactly the threshold.
+    func testThresholdComparisonIsInclusive() async throws {
         let detector = try StubPolicyDeviceDetection()
         detector.confidenceThreshold = 0.95
         detector.deviceScore = 0.95
         let image = try self.makeImage()
         let atThreshold = try await detector.isSpoofInImage(image, regionOfInterest: self.faceRegion)
-        XCTAssertFalse(atThreshold)
-        detector.deviceScore = 0.9501
-        let aboveThreshold = try await detector.isSpoofInImage(image, regionOfInterest: self.faceRegion)
-        XCTAssertTrue(aboveThreshold)
+        XCTAssertTrue(atThreshold)
+        detector.deviceScore = 0.9499
+        let belowThreshold = try await detector.isSpoofInImage(image, regionOfInterest: self.faceRegion)
+        XCTAssertFalse(belowThreshold)
+    }
+
+    /// The specification states the rule on the Stage 2 score: spoof when the
+    /// spoof probability is `>= 0.95`. Pinned separately because it is a
+    /// different call site from the stage 1 score above.
+    func testStageTwoScoreAtThresholdIsASpoof() async throws {
+        let detector = try StubPolicyDeviceDetection()
+        detector.deviceScore = nil
+        detector.confidenceThreshold = 0.95
+        let classifier = StubLivenessClassifier()
+        classifier.probability = 0.95
+        detector.faceLivenessClassifier = classifier
+        let isSpoof = try await detector.isSpoofInImage(try self.makeImage(), regionOfInterest: self.faceRegion)
+        XCTAssertTrue(isSpoof)
     }
 
     func testDefaultThresholdIsUnchanged() throws {

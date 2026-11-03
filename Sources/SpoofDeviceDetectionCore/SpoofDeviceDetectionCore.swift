@@ -17,7 +17,9 @@ open class SpoofDeviceDetectionCore: SpoofDetection {
     
     /// Score above which `isSpoofInImage` reports a spoof.
     ///
-    /// Note that `SpoofDetection.isSpoofInImage` uses `>` rather than `>=`.
+    /// The comparison is inclusive: `SpoofDetection.isSpoofInImage` reports a spoof
+    /// when the score is greater than or equal to this value, matching Android and
+    /// the cloud.
     public var confidenceThreshold: Float = 0.5
     
     /// Stage 2 classifier.
@@ -27,18 +29,37 @@ open class SpoofDeviceDetectionCore: SpoofDetection {
     /// - Since: 1.1.0
     public var faceLivenessClassifier: (any FaceLivenessClassifier)?
     
+    /// Score reported when the pipeline reaches no conclusion.
+    ///
+    /// Both stages signal inconclusive with `nil`: stage 1 when no device survives
+    /// the policy, stage 2 when the crop is degenerate. An inconclusive pipeline
+    /// resolves to **live**, and that is deliberate rather than incidental. The
+    /// pipeline's only other exit is the stage 1 device check, which has already
+    /// declined by the time this is reached, so there is no evidence of a spoof to
+    /// report and the result must not be read as a rejection. The trade-off is
+    /// real and is the same on Android: a spoof whose face box is degenerate reads
+    /// live. The case is unreachable behind the capture gate, which requires the
+    /// face to fill the oval before the countdown can complete.
+    /// - Since: 1.1.0
+    public static let inconclusiveScore: Float = 0
+
     public func detectSpoofInImage(_ image: Image, regionOfInterest: CGRect?) async throws -> Float {
         let spoofDevices = try await self.detectSpoofDevicesInImage(image)
         if let deviceScore = self.spoofScoreFromDeviceCheck(spoofDevices, imageSize: image.size, regionOfInterest: regionOfInterest) {
             return deviceScore
         }
         guard let classifier = self.faceLivenessClassifier, let region = regionOfInterest else {
-            // No face region means no evidence either way. Reporting zero rather
-            // than scoring the whole frame keeps a missing region from being read
-            // as a confident result.
-            return 0
+            // No face region means no evidence either way. Reporting the
+            // inconclusive score rather than scoring the whole frame keeps a
+            // missing region from being read as a confident result.
+            return Self.inconclusiveScore
         }
-        return try await classifier.spoofProbabilityInImage(image, regionOfInterest: region)
+        guard let probability = try await classifier.spoofProbabilityInImage(image, regionOfInterest: region) else {
+            // Stage 2 could not score the region, so the pipeline is inconclusive
+            // and resolves to live. See `inconclusiveScore`.
+            return Self.inconclusiveScore
+        }
+        return probability
     }
     
     /// Stage 1 policy: the score to report from the device detections, or `nil` to
