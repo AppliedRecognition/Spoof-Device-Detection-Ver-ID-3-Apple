@@ -40,7 +40,10 @@ final class SpoofDeviceDetectionTests: XCTestCase {
     }
     
     func testDetectSpoofDevices() async throws {
-        stub(condition: isPath("/detect_spoof_devices") && isMethodPOST()) { _ in
+        // `pathEndsWith`, not `isPath`: the configured endpoint's path is
+        // `/Prod/detect_spoof_devices`, so an exact match never fired and this test was reaching
+        // the live service rather than its own stub.
+        stub(condition: pathEndsWith("/detect_spoof_devices") && isMethodPOST()) { _ in
             do {
                 guard let jsonURL = Bundle.module.url(forResource: "response", withExtension: "json") else {
                     throw NSError()
@@ -77,7 +80,7 @@ final class SpoofDeviceDetectionTests: XCTestCase {
     }
     
     func testDetectSpoof() async throws {
-        stub(condition: isPath("/detect_spoof_devices") && isMethodPOST()) { _ in
+        stub(condition: pathEndsWith("/detect_spoof_devices") && isMethodPOST()) { _ in
             do {
                 guard let jsonURL = Bundle.module.url(forResource: "response", withExtension: "json") else {
                     throw NSError()
@@ -96,6 +99,7 @@ final class SpoofDeviceDetectionTests: XCTestCase {
     }
     
     func testDetectSpoofInCloud() async throws {
+        try XCTSkipIf(Self.cloudAPIKey == nil, "Set VERID_CLOUD_API_KEY to run the tests that call the cloud service.")
         HTTPStubs.setEnabled(false)
         guard let image = self.testImage else {
             XCTFail()
@@ -145,13 +149,25 @@ final class SpoofDeviceDetectionTests: XCTestCase {
         guard let url = URL(string: config.url) else {
             throw XCTSkip()
         }
-        return SpoofDeviceDetection(apiKey: config.apiKey, url: url)
+        // Constructed with whatever key is available, including none. The stubbed tests never
+        // reach the network, so only the cloud test needs a real key, and it skips itself.
+        // Skipping here would skip the whole class, because `setUpWithError` calls this.
+        return SpoofDeviceDetection(apiKey: Self.cloudAPIKey ?? "", url: url)
+    }
+
+    /// The cloud API key, taken from the environment.
+    ///
+    /// It used to sit in `Resources/config.json`, which is committed — and this repository is
+    /// public — so a live key for a metered service was republished in every clone. The endpoint
+    /// stays in the committed config; the key does not. Without one the cloud tests skip, which
+    /// is what a test needing a credential should do on a machine that has none.
+    private static var cloudAPIKey: String? {
+        ProcessInfo.processInfo.environment["VERID_CLOUD_API_KEY"].flatMap { $0.isEmpty ? nil : $0 }
     }
 }
 
 fileprivate struct Config: Decodable {
     
-    let apiKey: String
     let url: String
     
 }

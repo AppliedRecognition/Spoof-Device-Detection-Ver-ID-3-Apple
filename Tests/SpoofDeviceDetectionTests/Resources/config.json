@@ -1,4 +1,3 @@
 {
-    "apiKey": "BK1aJ1vpb08InLtOsdmhL6ZiRDJtq0H89nPqVuzB",
     "url": "https://j62fj0da16.execute-api.us-east-1.amazonaws.com/Prod/detect_spoof_devices"
 }
