@@ -15,7 +15,7 @@ import VerIDCommonTypes
 /// The device check lives in `SpoofDeviceDetectionCore`. Stage 2 is a separate
 /// model, so it is supplied by the package that owns the model rather than by
 /// this package, and this protocol is the seam between them.
-/// - Since: 2.0.0
+/// - Since: 1.1.0
 public protocol FaceLivenessClassifier: AnyObject {
 
     /// Spoof probability for the face in the given region.
@@ -41,11 +41,11 @@ public protocol FaceLivenessClassifier: AnyObject {
 /// These are shared between implementations so that a divergence is a deliberate
 /// change rather than a silent drift. The values match the reference
 /// implementation that the same model weights are served from in the cloud.
-/// - Since: 2.0.0
+/// - Since: 1.1.0
 public enum FaceLiveness {
 
     /// Side length of the model's square input.
-    /// - Since: 2.0.0
+    /// - Since: 1.1.0
     public static let inputSize = 224
 
     /// Side of the square crop as a multiple of the face region's longer side.
@@ -53,15 +53,15 @@ public enum FaceLiveness {
     /// A larger crop gives the classifier more of the context it needs to
     /// separate a real face from a face on a screen or a print, so this value is
     /// load bearing rather than cosmetic.
-    /// - Since: 2.0.0
+    /// - Since: 1.1.0
     public static let cropScale: CGFloat = 2.7
 
     /// ImageNet per-channel mean, applied after scaling pixel values to `0...1`.
-    /// - Since: 2.0.0
+    /// - Since: 1.1.0
     public static let mean: (red: Float, green: Float, blue: Float) = (0.485, 0.456, 0.406)
 
     /// ImageNet per-channel standard deviation.
-    /// - Since: 2.0.0
+    /// - Since: 1.1.0
     public static let std: (red: Float, green: Float, blue: Float) = (0.229, 0.224, 0.225)
 
     /// Shortest side, in pixels, that a stage 2 crop must have to be scored.
@@ -92,7 +92,7 @@ public enum FaceLiveness {
     ///   when the crop would be ``minimumCropSide`` or less in either dimension.
     ///
     ///   `nil` means **inconclusive**: do not score the full frame instead.
-    /// - Since: 2.0.0
+    /// - Since: 1.1.0
     public static func cropRect(forFaceRegionOfInterest region: CGRect, in imageSize: CGSize) -> CGRect? {
         let side = max(region.width, region.height) * self.cropScale
         let centre = CGPoint(x: region.midX, y: region.midY)
